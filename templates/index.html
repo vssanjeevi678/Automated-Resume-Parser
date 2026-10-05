@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automated Resume Parser & ATS Matcher</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            --card-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+        }
+        body {
+            background-color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: #1e293b;
+        }
+        .hero-banner {
+            background: var(--primary-gradient);
+            color: white;
+            padding: 3rem 0;
+            margin-bottom: 2rem;
+            border-radius: 0 0 1.5rem 1.5rem;
+            box-shadow: 0 4px 20px rgba(79, 70, 229, 0.15);
+        }
+        .upload-dropzone {
+            border: 2px dashed #cbd5e1;
+            border-radius: 1rem;
+            background: #ffffff;
+            padding: 2.5rem 1.5rem;
+            text-align: center;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .upload-dropzone:hover, .upload-dropzone.dragover {
+            border-color: #4f46e5;
+            background: #f5f3ff;
+        }
+        .custom-card {
+            border: none;
+            border-radius: 1rem;
+            box-shadow: var(--card-shadow);
+            background: #ffffff;
+        }
+        .skill-badge {
+            font-size: 0.85rem;
+            padding: 0.4rem 0.75rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            margin: 0.2rem;
+        }
+        .badge-cat {
+            background-color: #e0e7ff;
+            color: #3730a3;
+        }
+        .badge-matched {
+            background-color: #dcfce7;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+        }
+        .badge-missing {
+            background-color: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+        .score-circle {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            margin: 0 auto;
+            color: white;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="/">
+                <i class="bi bi-file-earmark-person-fill text-primary me-2"></i>ResumeParser AI
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navMenu">
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/"><i class="bi bi-cloud-arrow-up me-1"></i>Upload & Parse</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/candidates"><i class="bi bi-people-fill me-1"></i>Candidate Directory</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Header Banner -->
+    <div class="hero-banner text-center">
+        <div class="container">
+            <h1 class="display-6 fw-bold mb-2">Automated Resume Parser & ATS Matcher</h1>
+            <p class="lead mb-0 text-white-50">
+                Extract candidate names, emails, phone numbers, skills, education, and calculate ATS job-fit score in seconds.
+            </p>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="container mb-5">
+
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show custom-card" role="alert">
+                        <i class="bi bi-info-circle-fill me-2"></i>{{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Upload Section -->
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                <div class="card custom-card p-4 mb-4">
+                    <h4 class="card-title fw-bold mb-3 text-primary">
+                        <i class="bi bi-upload me-2"></i>Upload Candidate Resume
+                    </h4>
+
+                    <form action="/upload" method="POST" enctype="multipart/form-data" id="resumeForm">
+                        <div class="upload-dropzone mb-3" id="dropZone" onclick="document.getElementById('fileInput').click()">
+                            <i class="bi bi-file-earmark-arrow-up display-4 text-primary"></i>
+                            <h5 class="mt-2 fw-semibold" id="dropLabel">Choose a resume or drag & drop here</h5>
+                            <p class="text-muted small mb-0">Supported formats: <b>.PDF, .DOCX, .TXT</b> (Max 16MB)</p>
+                            <input type="file" name="resume" id="fileInput" class="d-none" accept=".pdf,.docx,.doc,.txt" required onchange="handleFileSelected(this)">
+                        </div>
+
+                        <!-- Optional Job Description for ATS Match -->
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-secondary">
+                                <i class="bi bi-bullseye me-1"></i>Job Description for ATS Matching <span class="badge bg-light text-muted">Optional</span>
+                            </label>
+                            <textarea name="job_description" rows="3" class="form-control" placeholder="Paste the target job description or required skills here to compute matching score and skills gap analysis...">{{ job_description or '' }}</textarea>
+                            <div class="form-text">If provided, our ATS engine compares candidate skills against the JD and pinpoints missing skills.</div>
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button type="submit" class="btn btn-primary btn-lg px-4 shadow-sm" id="submitBtn">
+                                <i class="bi bi-magic me-2"></i>Parse Resume
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Parsed Results Section -->
+        {% if parsed %}
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                
+                <!-- Candidate Overview Card -->
+                <div class="card custom-card mb-4 border-top border-4 border-primary">
+                    <div class="card-body p-4">
+                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 pb-3 border-bottom">
+                            <div>
+                                <h2 class="fw-bold mb-1 text-dark">
+                                    <i class="bi bi-person-badge text-primary me-2"></i>{{ parsed.name }}
+                                </h2>
+                                <span class="badge bg-success me-2"><i class="bi bi-check-circle me-1"></i>Parsed Successfully</span>
+                                {% if candidate_id %}
+                                    <span class="badge bg-light text-dark">Candidate ID: #{{ candidate_id }}</span>
+                                {% endif %}
+                            </div>
+                            <div class="d-flex gap-2 flex-wrap">
+                                {% if parsed.email %}
+                                    <a href="mailto:{{ parsed.email }}" class="btn btn-outline-primary btn-sm">
+                                        <i class="bi bi-envelope me-1"></i>{{ parsed.email }}
+                                    </a>
+                                {% endif %}
+                                {% if parsed.phone %}
+                                    <a href="tel:{{ parsed.phone }}" class="btn btn-outline-secondary btn-sm">
+                                        <i class="bi bi-telephone me-1"></i>{{ parsed.phone }}
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Social & Professional Links -->
+                        <div class="row mt-3 g-2">
+                            {% if parsed.linkedin %}
+                            <div class="col-auto">
+                                <a href="{{ parsed.linkedin }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-linkedin me-1"></i>LinkedIn Profile
+                                </a>
+                            </div>
+                            {% endif %}
+                            {% if parsed.github %}
+                            <div class="col-auto">
+                                <a href="{{ parsed.github }}" target="_blank" class="btn btn-sm btn-outline-dark">
+                                    <i class="bi bi-github me-1"></i>GitHub Profile
+                                </a>
+                            </div>
+                            {% endif %}
+                            {% if parsed.portfolio %}
+                            <div class="col-auto">
+                                <a href="{{ parsed.portfolio }}" target="_blank" class="btn btn-sm btn-outline-info">
+                                    <i class="bi bi-globe me-1"></i>Portfolio
+                                </a>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- ATS Matcher Score (if JD provided) -->
+                        {% if parsed.ats_result and parsed.ats_result.score is not none %}
+                        <div class="card bg-light border-0 rounded-3 p-3 mt-4">
+                            <div class="row align-items-center">
+                                <div class="col-md-3 text-center mb-3 mb-md-0">
+                                    <div class="score-circle {% if parsed.ats_result.score >= 70 %}bg-success{% elif parsed.ats_result.score >= 40 %}bg-warning{% else %}bg-danger{% endif %} shadow">
+                                        <span class="h2 mb-0 fw-bold">{{ parsed.ats_result.score }}%</span>
+                                        <span class="small">ATS Match</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-9">
+                                    <h5 class="fw-bold mb-1">ATS Job Fit Analysis</h5>
+                                    <p class="text-muted small mb-2">{{ parsed.ats_result.summary }}</p>
+
+                                    <!-- Matched Skills -->
+                                    <div class="mb-2">
+                                        <span class="small fw-semibold text-success d-block mb-1">
+                                            <i class="bi bi-check2-circle me-1"></i>Matched Skills ({{ parsed.ats_result.matched_skills|length }}):
+                                        </span>
+                                        {% for s in parsed.ats_result.matched_skills %}
+                                            <span class="skill-badge badge-matched"><i class="bi bi-check me-1"></i>{{ s }}</span>
+                                        {% else %}
+                                            <span class="text-muted small">None matched yet.</span>
+                                        {% endfor %}
+                                    </div>
+
+                                    <!-- Missing Skills -->
+                                    {% if parsed.ats_result.missing_skills %}
+                                    <div>
+                                        <span class="small fw-semibold text-danger d-block mb-1">
+                                            <i class="bi bi-exclamation-triangle me-1"></i>Missing Skills from Job Description ({{ parsed.ats_result.missing_skills|length }}):
+                                        </span>
+                                        {% for s in parsed.ats_result.missing_skills %}
+                                            <span class="skill-badge badge-missing"><i class="bi bi-x me-1"></i>{{ s }}</span>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Extracted Technical Skills -->
+                        <div class="mt-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h5 class="fw-bold text-dark mb-0">
+                                    <i class="bi bi-cpu text-primary me-2"></i>Extracted Skills
+                                </h5>
+                                <span class="badge bg-primary rounded-pill">{{ parsed.skills_count }} Identified</span>
+                            </div>
+
+                            {% if parsed.skills_categorized %}
+                                {% for category, cat_skills in parsed.skills_categorized.items() %}
+                                    <div class="mb-2">
+                                        <span class="badge bg-secondary-subtle text-secondary-emphasis me-2 fw-semibold">{{ category }}:</span>
+                                        {% for s in cat_skills %}
+                                            <span class="skill-badge badge-cat">{{ s }}</span>
+                                        {% endfor %}
+                                    </div>
+                                {% endfor %}
+                            {% elif parsed.skills %}
+                                <div>
+                                    {% for s in parsed.skills %}
+                                        <span class="skill-badge badge-cat">{{ s }}</span>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <p class="text-muted small">No specific technical skills matched the dictionary.</p>
+                            {% endif %}
+                        </div>
+
+                        <!-- Education & Experience Grid -->
+                        <div class="row mt-4 g-3">
+                            <div class="col-md-6">
+                                <div class="card h-100 border p-3 rounded-3">
+                                    <h6 class="fw-bold text-dark mb-2">
+                                        <i class="bi bi-mortarboard-fill text-primary me-2"></i>Education
+                                    </h6>
+                                    {% if parsed.education %}
+                                        <ul class="list-unstyled mb-0">
+                                            {% for edu in parsed.education %}
+                                                <li class="mb-2 pb-2 border-bottom last-border-0">
+                                                    <i class="bi bi-check-circle-fill text-success small me-1"></i>{{ edu }}
+                                                </li>
+                                            {% endfor %}
+                                        </ul>
+                                    {% else %}
+                                        <p class="text-muted small mb-0">No specific degree keyword detected.</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="card h-100 border p-3 rounded-3">
+                                    <h6 class="fw-bold text-dark mb-2">
+                                        <i class="bi bi-briefcase-fill text-primary me-2"></i>Work Experience
+                                    </h6>
+                                    <p class="mb-1">
+                                        <b>Estimated Experience:</b> 
+                                        <span class="badge bg-info text-dark">
+                                            {{ parsed.experience.years }} Year(s)
+                                        </span>
+                                    </p>
+                                    {% if parsed.experience.date_ranges %}
+                                        <div class="small text-muted mt-2">
+                                            <b>Detected Timeframes:</b>
+                                            {% for dr in parsed.experience.date_ranges %}
+                                                <span class="badge bg-light text-dark border me-1">{{ dr }}</span>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="mt-4 pt-3 border-top d-flex justify-content-between align-items-center">
+                            <a href="/" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-repeat me-1"></i>Parse Another Resume
+                            </a>
+                            <a href="/candidates" class="btn btn-primary">
+                                <i class="bi bi-table me-1"></i>View All Candidates
+                            </a>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Recent Uploads Section -->
+        {% if recent_candidates and not parsed %}
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                <div class="card custom-card p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="fw-bold mb-0 text-dark">
+                            <i class="bi bi-clock-history me-2 text-primary"></i>Recently Parsed Candidates
+                        </h5>
+                        <a href="/candidates" class="btn btn-sm btn-outline-primary">View All</a>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Phone</th>
+                                    <th>Top Skills</th>
+                                    <th>ATS Score</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for c in recent_candidates %}
+                                <tr>
+                                    <td class="fw-semibold">{{ c.name }}</td>
+                                    <td>{{ c.email or '-' }}</td>
+                                    <td>{{ c.phone or '-' }}</td>
+                                    <td>
+                                        <small class="text-muted text-truncate d-inline-block" style="max-width: 250px;">
+                                            {{ c.skills or 'None' }}
+                                        </small>
+                                    </td>
+                                    <td>
+                                        {% if c.ats_score %}
+                                            <span class="badge {% if c.ats_score >= 70 %}bg-success{% elif c.ats_score >= 40 %}bg-warning{% else %}bg-secondary{% endif %}">
+                                                {{ c.ats_score }}%
+                                            </span>
+                                        {% else %}
+                                            <span class="text-muted small">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="/candidates/{{ c.id }}" class="btn btn-sm btn-outline-primary">View</a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function handleFileSelected(input) {
+            if (input.files && input.files[0]) {
+                const fileName = input.files[0].name;
+                document.getElementById('dropLabel').innerHTML = '<i class="bi bi-file-earmark-check text-success me-1"></i> Selected: ' + fileName;
+            }
+        }
+
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.classList.add('dragover');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.classList.remove('dragover');
+            }, false);
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                handleFileSelected(fileInput);
+            }
+        });
+    </script>
+</body>
+</html>

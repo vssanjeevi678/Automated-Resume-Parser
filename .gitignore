@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*.class
+*.sqlite
+resume_db.sqlite
+uploads/*
+!uploads/.gitkeep
+.env
+.venv
+env/
+venv/
