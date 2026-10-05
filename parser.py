@@ -168,22 +168,24 @@ def extract_links(text: str) -> Dict[str, str]:
     """Extract LinkedIn, GitHub, and Portfolio URLs."""
     links = {"linkedin": "", "github": "", "portfolio": ""}
 
-    linkedin_pattern = r'(https?://(?:www\.)?linkedin\.com/in/[a-zA-Z0-9_-]+)'
-    github_pattern = r'(https?://(?:www\.)?github\.com/[a-zA-Z0-9_-]+)'
+    linkedin_pattern = r'(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[a-zA-Z0-9_\-]+'
+    github_pattern = r'(?:https?:\/\/)?(?:www\.)?github\.com\/[a-zA-Z0-9_\-]+'
     url_pattern = r'https?://[^\s/$.?#].[^\s]*'
 
     li_match = re.search(linkedin_pattern, text, re.IGNORECASE)
     if li_match:
-        links["linkedin"] = li_match.group(0)
+        val = li_match.group(0).strip().rstrip("/.")
+        links["linkedin"] = val if val.startswith("http") else f"https://{val}"
 
     gh_match = re.search(github_pattern, text, re.IGNORECASE)
     if gh_match:
-        links["github"] = gh_match.group(0)
+        val = gh_match.group(0).strip().rstrip("/.")
+        links["github"] = val if val.startswith("http") else f"https://{val}"
 
     urls = re.findall(url_pattern, text)
     for u in urls:
         if "linkedin.com" not in u.lower() and "github.com" not in u.lower():
-            links["portfolio"] = u
+            links["portfolio"] = u.strip().rstrip("/.")
             break
 
     return links
